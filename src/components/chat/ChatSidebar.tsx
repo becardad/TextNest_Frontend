@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, MessageCircle, X, Pin, PinOff, BellOff, Archive, Plus, Settings, ArrowLeft, CircleDot, Star, Heart } from "lucide-react";
+import { Search, MessageCircle, MessageSquare, X, Pin, PinOff, BellOff, Archive, Plus, Settings, ArrowLeft, CircleDot, Star, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import UserAvatar from "./UserAvatar";
 import NewGroupDialog from "./NewGroupDialog";
@@ -40,18 +40,7 @@ export default function ChatSidebar({ chats, activeChatId, onSelectChat, onOpenS
 
   // Sync localChats when parent chats prop changes
   useEffect(() => {
-    setLocalChats(prev => {
-      const updatedMap = new Map(chats.map(c => [c.user.id, c]));
-      const merged = prev.map(c => {
-        const updated = updatedMap.get(c.user.id);
-        if (updated) {
-          updatedMap.delete(c.user.id);
-          return { ...updated };
-        }
-        return c;
-      });
-      return [...Array.from(updatedMap.values()), ...merged];
-    });
+    setLocalChats(chats);
   }, [chats]);
 
   // Search backend when query changes
@@ -241,13 +230,10 @@ export default function ChatSidebar({ chats, activeChatId, onSelectChat, onOpenS
 
   return (
     <aside className="flex flex-col h-full bg-background w-full shrink-0 border-r border-border">
-      {/* Header */}
+      {/* Search Header */}
       <div className="p-5 pb-3 space-y-3 shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <TextNestLogo size={36} className="-ml-1.5" />
-            <h1 className="text-lg font-bold text-foreground tracking-tight">TextNest</h1>
-          </div>
+          <h1 className="text-xl font-bold text-foreground tracking-tight">Chats</h1>
           <div className="flex items-center gap-0.5">
             <button
               onClick={() => setShowNewGroup(true)}

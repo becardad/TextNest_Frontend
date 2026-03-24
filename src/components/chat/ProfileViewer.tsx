@@ -16,9 +16,11 @@ interface ProfileViewerProps {
   onMessage?: () => void;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
+  isGroupAdmin?: boolean;
+  groupId?: string;
 }
 
-export default function ProfileViewer({ user, chat, isOwnProfile, onClose, onCall, onMessage, isFavorite, onToggleFavorite }: ProfileViewerProps) {
+export default function ProfileViewer({ user, chat, isOwnProfile, onClose, onCall, onMessage, isFavorite, onToggleFavorite, isGroupAdmin, groupId }: ProfileViewerProps) {
   const { login } = useAuth(); // We can use login to quietly update context state
   const [editingBio, setEditingBio] = useState(false);
   const [bio, setBio] = useState(user.bio || "");
@@ -27,11 +29,17 @@ export default function ProfileViewer({ user, chat, isOwnProfile, onClose, onCal
 
   const handleUpdateProfile = async (updates: Partial<User>) => {
     try {
-      const res = await api.put('/chat/profile', updates);
-      toast.success("Profile updated");
-      const savedUser = JSON.parse(sessionStorage.getItem('user') || "{}");
-      const updatedUser = { ...savedUser, ...updates };
-      login(updatedUser, sessionStorage.getItem('token') || "");
+      if (groupId) {
+        await api.put(`/chat/groups/${groupId}`, updates);
+        toast.success("Group updated");
+        // We might want to reload or update the local chat object here
+      } else {
+        const res = await api.put('/chat/profile', updates);
+        toast.success("Profile updated");
+        const savedUser = JSON.parse(sessionStorage.getItem('user') || "{}");
+        const updatedUser = { ...savedUser, ...updates };
+        login(updatedUser, sessionStorage.getItem('token') || "");
+      }
     } catch (err) {
       toast.error("Failed to update profile");
     }
@@ -92,7 +100,7 @@ export default function ProfileViewer({ user, chat, isOwnProfile, onClose, onCal
                 <UserAvatar name={user.name} size="xl" />
               </div>
             )}
-            {isOwnProfile && (
+            {(isOwnProfile || isGroupAdmin) && (
               <label className="absolute bottom-0 right-0 h-8 w-8 rounded-full gradient-primary flex items-center justify-center shadow-md border-2 border-background active:scale-95 transition-transform cursor-pointer">
                 <Camera className="h-3.5 w-3.5 text-white" />
                 <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />

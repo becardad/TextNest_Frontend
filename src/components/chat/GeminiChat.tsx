@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, Trash2, Copy, Check } from "lucide-react";
+import { Send, Sparkles, Trash2, Copy, Check, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import TextNestLogo from "../TextNestLogo";
 
 interface GeminiMessage {
   id: string;
@@ -10,8 +10,9 @@ interface GeminiMessage {
   timestamp: string;
 }
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+interface GeminiChatProps {
+  onBack?: () => void;
+}
 
 const SYSTEM_PROMPT = `You are a friendly, helpful AI assistant embedded in TextNest — a modern chat app. 
 You love casual conversation, answering questions, brainstorming ideas, telling jokes, and helping with everyday tasks.
@@ -30,11 +31,11 @@ export default function GeminiChat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState("gemini-1.5-flash");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    console.log("Gemini SDK Initialized");
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
@@ -53,99 +54,44 @@ export default function GeminiChat() {
     setLoading(true);
 
     try {
-      if (!GEMINI_API_KEY || GEMINI_API_KEY.length < 10) {
-        throw new Error("Missing API Key. Check your .env file!");
+      const api_url = import.meta.env.VITE_API_URL || "http://localhost:5001";
+      
+      // Determine provider based on modelId
+      const provider = selectedModelId.startsWith('hf-') ? 'huggingface' : 'gemini';
+      const cleanModelId = selectedModelId.replace('hf-', '');
+
+      const response = await fetch(`${api_url}/api/ai/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: messages.concat(userMsg),
+          provider,
+          modelId: cleanModelId
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to get AI response");
       }
 
-      // Re-initialize genAI inside to ensure latest .env state
-      const activeGenAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-
-      // Model Fallback Logic: Try flash, then pro, then legacy
-      const modelsToTry = [
-        { id: "gemini-1.5-flash", systemSupport: true },
-        { id: "gemini-1.5-pro", systemSupport: true },
-        { id: "gemini-pro", systemSupport: false }
-      ];
-
-      let lastError: any = null;
-      let success = false;
-      let reply = "";
-
-      for (const modelConfig of modelsToTry) {
-        try {
-          console.log(`Gemini Attempt: Trying ${modelConfig.id}...`);
-          
-          // Construct model options
-          const modelOptions: any = { model: modelConfig.id };
-          if (modelConfig.systemSupport) {
-            modelOptions.systemInstruction = SYSTEM_PROMPT;
-          }
-
-          const model = activeGenAI.getGenerativeModel(modelOptions);
-
-          const chatHistory = messages.map((m) => ({
-            role: m.role === "user" ? "user" : "model",
-            parts: [{ text: m.text }],
-          }));
-
-          const chat = model.startChat({ history: chatHistory });
-
-          // If legacy model and first message, prepend system instruction to the prompt
-          let messageToSend = trimmed;
-          if (!modelConfig.systemSupport && chatHistory.length === 0) {
-            messageToSend = `Instruction: ${SYSTEM_PROMPT}\n\nUser: ${trimmed}`;
-          }
-
-          const result = await chat.sendMessage(messageToSend);
-          // Note: If we prepended, we already sent the first message.
-          // But startChat + sendMessage is cleaner.
-          
-          const response = await result.response;
-          reply = response.text();
-          success = true;
-          console.log(`Gemini Success: Responded using ${modelConfig.id}`);
-          break; 
-        } catch (err: any) {
-          console.warn(`Gemini Warning: ${modelConfig.id} failed:`, err.message);
-          lastError = err;
-          // Continue if 404/NotFound or if the model just didn't support the config
-          const isNotFoundError = err.message?.toLowerCase().includes("404") || err.message?.toLowerCase().includes("not found");
-          const isModelError = err.message?.toLowerCase().includes("model");
-          
-          if (!isNotFoundError && !isModelError) {
-            break; // Stop on 401/403/429
-          }
-        }
-      }
-
-      if (!success) throw lastError;
+      const data = await response.json();
 
       const modelMsg: GeminiMessage = {
         id: `m-${Date.now()}`,
         role: "model",
-        text: reply || "Sorry, I couldn't generate a response.",
+        text: data.text || "Sorry, I couldn't generate a response.",
         timestamp: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       };
       setMessages((prev) => [...prev, modelMsg]);
     } catch (err: any) {
-      console.error("Gemini SDK Fatal Error:", err);
-      const errorText = err.message || "";
-      const isRateLimit = errorText.includes("429");
-      const isForbidden = errorText.includes("403");
-      const isConfigError = errorText.includes("404") || errorText.includes("not found");
-      
+      console.error("Gemini Error:", err);
       setMessages((prev) => [
         ...prev,
         {
           id: `err-${Date.now()}`,
           role: "model",
-          text: isRateLimit 
-            ? "⚠️ Rate limit exceeded (Error 429). Please wait 1 minute!"
-            : isForbidden
-            ? `⚠️ Access Forbidden (Error 403).\n\n1. Check if your API key is correct in .env.\n2. Ensure the 'Generative Language API' is enabled in your Google Cloud Console.\n3. Make sure you are in a supported region.`
-            : isConfigError
-            ? `⚠️ Model Not Found (Error 404).\n\nAttempted models: gemini-1.5-flash, gemini-1.5-pro, gemini-pro.\nPlease check your AI Studio project permissions.`
-            : `⚠️ Connection failed: ${errorText}`,
+          text: `⚠️ Error: ${err.message || "Connection failed"}`,
           timestamp: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
         },
       ]);
@@ -163,38 +109,44 @@ export default function GeminiChat() {
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 glass border-b border-border/50 shrink-0">
-        <div className="relative">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#4285F4] via-[#EA4335] to-[#FBBC05] flex items-center justify-center shadow-lg">
-            <GeminiIcon className="w-5 h-5 text-white" />
+      <div className="flex flex-col shrink-0 glass border-b border-border/50">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div className="relative">
+            <div className="w-9 h-9 rounded-xl bg-[#121212]/90 flex items-center justify-center shadow-lg border border-white/5">
+              <Sparkles className="w-5 h-5 text-primary" />
+            </div>
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-background" />
           </div>
-          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-400 border-2 border-background" />
+          <div className="flex-1">
+            <h2 className="text-sm font-bold text-foreground">TextNest AI</h2>
+            <p className="text-[10px] text-green-500 font-medium">Online · Ready to help</p>
+          </div>
+          <button
+            onClick={() => setMessages([])}
+            title="Clear conversation"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-accent transition-all"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
         </div>
-        <div className="flex-1">
-          <h2 className="text-sm font-bold text-foreground">Gemini AI</h2>
-          <p className="text-[10px] text-green-500 font-medium">Always available · Powered by Google</p>
-        </div>
-        <button
-          onClick={() => setMessages([])}
-          title="Clear conversation"
-          className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-accent transition-all"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto scrollbar-thin py-4 px-3 space-y-3">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-6 pb-4 animate-fade-in">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4285F4] via-[#EA4335] to-[#FBBC05] flex items-center justify-center shadow-xl">
-              <GeminiIcon className="w-10 h-10 text-white" />
+          <div className="flex flex-col items-center justify-center h-full gap-4 pb-4 animate-fade-in -mt-12">
+            <div className="w-20 h-20 rounded-3xl bg-[#121212]/90 flex items-center justify-center shadow-xl shadow-black/20 border border-white/5 transition-transform duration-500 hover:scale-105">
+              <Sparkles className="w-10 h-10 text-primary" />
             </div>
-            <div className="text-center">
-              <h3 className="font-bold text-lg text-foreground mb-1">Chat with Gemini</h3>
-              <p className="text-xs text-muted-foreground max-w-[220px]">Ask questions, get creative ideas, have fun conversations — all powered by Google Gemini AI.</p>
+            <div className="text-center space-y-2 mt-2">
+              <h3 className="font-black text-2xl tracking-tight bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent">Chat with TextNest AI</h3>
+              <p className="text-[13px] text-muted-foreground max-w-[280px] leading-relaxed">
+                Your intelligent companion for creative ideas, 
+                quick answers, and meaningful conversations.
+              </p>
             </div>
-            <div className="flex flex-col gap-2 w-full max-w-xs">
+            <div className="flex flex-col gap-2 w-full max-w-xs mt-4">
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s}
@@ -214,8 +166,8 @@ export default function GeminiChat() {
             className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}
           >
             {msg.role === "model" && (
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#4285F4] via-[#EA4335] to-[#FBBC05] flex items-center justify-center shrink-0 mt-1 shadow-md">
-                <GeminiIcon className="w-3.5 h-3.5 text-white" />
+              <div className="w-8 h-8 rounded-lg bg-[#121212]/90 flex items-center justify-center shrink-0 mt-1 shadow-sm border border-white/5">
+                <Sparkles className="w-4 h-4 text-primary" />
               </div>
             )}
             <div className={cn("group relative max-w-[80%] flex flex-col gap-1", msg.role === "user" ? "items-end" : "items-start")}>
@@ -247,8 +199,8 @@ export default function GeminiChat() {
 
         {loading && (
           <div className="flex gap-2 justify-start">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#4285F4] via-[#EA4335] to-[#FBBC05] flex items-center justify-center shrink-0 mt-1">
-              <GeminiIcon className="w-3.5 h-3.5 text-white" />
+            <div className="w-8 h-8 rounded-lg bg-[#121212]/90 flex items-center justify-center shrink-0 mt-1 border border-white/5">
+              <Sparkles className="w-4 h-4 text-primary" />
             </div>
             <div className="px-4 py-3 rounded-2xl rounded-bl-[6px] bg-card border border-border/40 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "0ms" }} />
@@ -266,7 +218,7 @@ export default function GeminiChat() {
         <textarea
           ref={textareaRef}
           rows={1}
-          placeholder="Ask Gemini anything..."
+          placeholder="Ask TextNest AI anything..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {

@@ -11,6 +11,7 @@ export interface User {
   archived?: string[];
   pinned?: string[];
   chatBackgrounds?: Record<string, string>;
+  admin?: string;
   settings?: {
     theme: 'light' | 'dark';
     textSize: number;

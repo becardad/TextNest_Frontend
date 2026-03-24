@@ -665,6 +665,8 @@ export default function ChatWindow({ chat, onBack, textSize = 16, starredIds, on
         onMessage={() => setShowProfile(false)}
         isFavorite={favoriteIds?.has(chat.user.id)}
         onToggleFavorite={() => onToggleFavorite?.(chat.user.id)}
+        isGroupAdmin={chat.user.admin === user?.id}
+        groupId={(chat as any).type === "group" || chat.user.admin ? chat.user.id : undefined}
       />
     );
   }

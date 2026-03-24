@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import SideNav, { NavTab } from "@/components/chat/SideNav";
 import ChatSidebar from "@/components/chat/ChatSidebar";
 import ChatWindow from "@/components/chat/ChatWindow";
@@ -16,7 +16,7 @@ import type { Chat, User, Message } from "@/data/mockData";
 import { encryptMessage, decryptMessage } from "@/lib/encryption";
 import { useAuth } from "@/hooks/useAuth";
 import api from "@/lib/api";
-import { socket } from "@/lib/socket";
+import { socket, atomicEmit } from "@/lib/socket";
 import { toast } from "sonner";
 
 
@@ -41,6 +41,16 @@ export default function ChatPage() {
     return user?.favorites ? new Set((user.favorites as any).map((f: any) => typeof f === 'string' ? f : f._id)) : new Set<string>();
   });
   const activeChat = allChats.find((c) => c.user.id === activeChatId) ?? null;
+  
+  // Refs to avoid circular dependencies in socket listeners
+  const allChatsRef = useRef(allChats);
+  const activeChatIdRef = useRef(activeChatId);
+  const userRef = useRef(user);
+  const hasJoinedRef = useRef(false);
+
+  useEffect(() => { allChatsRef.current = allChats; }, [allChats]);
+  useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
+  useEffect(() => { userRef.current = user; }, [user]);
 
   const totalUnread = allChats.reduce((acc, chat) => acc + (chat.unread || 0), 0);
 
@@ -78,12 +88,12 @@ export default function ChatPage() {
         });
 
         const groupChats: Chat[] = groupRes.data.map((g: any) => {
-          if (socket.connected) socket.emit('join_group', g._id);
           return {
             user: {
               id: g._id,
               name: g.name,
               online: true,
+              admin: g.admin,
               avatar: '',
               bio: `${g.members.length} members`,
               profilePicture: g.profilePicture || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(g.name) + '&background=random'
@@ -142,24 +152,29 @@ export default function ChatPage() {
 
   // Set up global socket listener so the Sidebar updates dynamically
   useEffect(() => {
+    console.log("Socket Effect Running - user?.id changed:", user?.id);
     const onIncomingMessage = (msg: any) => {
-      // Auto-log calls to the Sidebar when a call starts (so sender is reliably the initiator)
+      const currentAllChats = allChatsRef.current;
+      const currentActiveChatId = activeChatIdRef.current;
+      const currentUser = userRef.current;
+
+      // Auto-log calls to the Sidebar when a call starts
       if (msg.type === "system" && msg.text.includes("started")) {
         const isVoice = msg.text.includes("Voice");
-        const isOutgoing = String(msg.senderId) === String(user?.id); 
+        const isOutgoing = String(msg.senderId) === String(currentUser?.id); 
         const contactId = isOutgoing ? msg.receiverId : msg.senderId;
         
         // Persist to DB
         api.post('/chat/calls', {
           receiver: contactId,
           type: isVoice ? "voice" : "video",
-          status: "answered", // For simplicity, marking as answered if system message appears
+          status: "answered",
           duration: 0
         }).catch(console.error);
 
         setCallLogs(prev => {
           if (prev.some(log => String(log.id) === String(msg._id))) return prev;
-          const contactUser = allChats.find(c => String(c.user.id) === String(contactId))?.user || { id: contactId, name: "Unknown", online: false, avatar: "", profilePicture: "" };
+          const contactUser = currentAllChats.find(c => String(c.user.id) === String(contactId))?.user || { id: contactId, name: "Unknown", online: false, avatar: "", profilePicture: "" };
           
           return [{
             id: msg._id,
@@ -178,14 +193,14 @@ export default function ChatPage() {
           const msgSenderId = String(msg.senderId);
           const msgReceiverId = String(msg.receiverId);
           const msgGroupId = msg.groupId ? String(msg.groupId) : null;
-          const myId = String(user?.id);
+          const myId = String(currentUser?.id);
 
           if (chatId === msgSenderId || chatId === msgReceiverId || (msgGroupId && chatId === msgGroupId)) {
             return {
               ...c,
               lastMessage: msg.text ? decryptMessage(msg.text) : (msg.type === "image" ? "📷 Photo" : msg.type === "voice" ? "🎙️ Voice note" : "📎 Media"),
               lastMessageTime: new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-              unread: (String(activeChatId) === chatId || msgSenderId === myId || msg.type === "system") ? 0 : (c.unread || 0) + 1
+              unread: (String(currentActiveChatId) === chatId || msgSenderId === myId || msg.type === "system") ? 0 : (c.unread || 0) + 1
             };
           }
           return c;
@@ -198,21 +213,32 @@ export default function ChatPage() {
     };
 
     const handleConnect = () => {
-      if (user?.id) {
-        socket.emit('join', user.id);
+      if (!socket.connected || hasJoinedRef.current) return;
+      
+      const currentUser = userRef.current;
+      const currentAllChats = allChatsRef.current;
+      
+      if (currentUser?.id) {
+        console.log("Performing atomic socket join for:", currentUser.id);
+        atomicEmit('join', currentUser.id);
         // Rejoin group chats
-        allChats.forEach(c => {
-          if (!c.user.online && c.user.bio?.includes('members')) {
-            socket.emit('join_group', c.user.id);
+        currentAllChats.forEach(c => {
+          if (c.user.admin || c.user.bio?.includes('members')) {
+            atomicEmit('join_group', c.user.id);
           }
         });
+        hasJoinedRef.current = true;
       }
     };
 
+    const handleDisconnect = () => {
+      console.log("Socket disconnected - resetting join guard");
+      hasJoinedRef.current = false;
+    };
+
     const handleIncomingCall = (data: { from: string, fromName: string, callType: "voice" | "video", offer: any }) => {
-      console.log("Receiving call request from:", data.from, data.fromName);
-      
-      const callerUser = allChats.find(c => String(c.user.id) === String(data.from))?.user || {
+      const currentAllChats = allChatsRef.current;
+      const callerUser = currentAllChats.find(c => String(c.user.id) === String(data.from))?.user || {
         id: data.from,
         name: data.fromName,
         online: true,
@@ -250,17 +276,19 @@ export default function ChatPage() {
     }
 
     socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
     socket.on('receive_message', onIncomingMessage);
     socket.on('online_users', onlineListener);
     socket.on('call_request', handleIncomingCall);
 
     return () => {
       socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
       socket.off('receive_message', onIncomingMessage);
       socket.off('online_users', onlineListener);
       socket.off('call_request', handleIncomingCall);
     };
-  }, [activeChatId, user?.id, allChats]);
+  }, [user?.id]);
 
   // Sync document title with unread count
   useEffect(() => {
@@ -347,6 +375,7 @@ export default function ChatPage() {
           id: newGroup._id, 
           name: newGroup.name, 
           online: true, 
+          admin: newGroup.admin,
           avatar: "", 
           bio: `${newGroup.members.length} members`,
           profilePicture: "https://ui-avatars.com/api/?name=" + encodeURIComponent(newGroup.name) + "&background=random" 
@@ -388,15 +417,13 @@ export default function ChatPage() {
         {/* Chat Sidebar / Calls Sidebar */}
         <div className={cn(
           "shrink-0 transition-all duration-300",
-          activeChatId || mainPanel ? "hidden md:flex md:w-[380px] lg:w-[420px]" : "flex w-full md:w-[380px] lg:w-[420px]"
+          activeChatId || mainPanel || activeTab === "gemini" ? "hidden md:flex md:w-[380px] lg:w-[420px]" : "flex w-full md:w-[380px] lg:w-[420px]"
         )}>
           {activeTab === "calls" ? (
             <CallsSidebar 
               callLogs={callLogs} 
               onStartCall={(u, type) => setActiveCall({ user: u, type })} 
             />
-          ) : activeTab === "gemini" ? (
-            <GeminiChat />
           ) : activeTab === "starred" ? (
             <StarredMessages starredMessages={starredMessages} onClose={() => setActiveTab("chats")} />
           ) : activeTab === "settings" ? (
@@ -426,12 +453,16 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* Main Panel (Chat Window / Empty State) */}
+        {/* Main Panel (Chat Window / Empty State / Gemini) */}
         <div className={cn(
           "flex-1 flex min-w-0 transition-all duration-300",
-          activeChatId || mainPanel ? "flex" : "hidden md:flex"
+          activeChatId || mainPanel || activeTab === "gemini" ? "flex" : "hidden md:flex"
         )}>
-          {showStatus ? (
+          {activeTab === "gemini" ? (
+             <div className="flex-1">
+               <GeminiChat />
+             </div>
+          ) : showStatus ? (
             <div className="flex-1 animate-fade-in">
               <StatusView onClose={() => setActiveTab("chats")} />
             </div>

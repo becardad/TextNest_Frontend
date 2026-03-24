@@ -89,15 +89,19 @@ export default function TextNestLogo({ className, size = 150, birdVariant = 'loo
           </svg>
         </div>
       ) : (
-        <div className="absolute pointer-events-none animate-bird-visit" style={{ top: -28, right: -28 }}>
-          <svg width="34" height="21" viewBox="0 0 170 88" xmlns="http://www.w3.org/2000/svg">
+        <div className="absolute pointer-events-none animate-bird-visit" style={{ top: -48 * scale, right: -48 * scale }}>
+          <svg width={Math.round(86 * scale)} height={Math.round(54 * scale)} viewBox="0 0 170 88" xmlns="http://www.w3.org/2000/svg">
             <ellipse cx="84" cy="56" rx="30" ry="18" fill="hsl(var(--primary))" />
             <circle cx="106" cy="44" r="15" fill="hsl(var(--primary))" />
-            <path d="M121 43 L138 40 L121 49" fill="hsl(28,85%,58%)" />
+            <circle cx="111" cy="41" r="3.5" fill="#fff" />
+            <circle cx="112" cy="41" r="2" fill="#1a0e05" />
+            <path d="M121 43 L142 38 L121 49" fill="hsl(28,85%,58%)" />
             <path fill="hsl(var(--primary)/0.9)" d="M80 50 Q56 18 18 16 Q44 34 76 48 Z">
               <animateTransform attributeName="transform" type="rotate"
                 values="0;-25;5;25;0" dur="0.25s" repeatCount="indefinite" additive="sum" />
             </path>
+            <path d="M54 58 Q30 70 14 65" stroke="hsl(var(--primary))" strokeWidth="4" fill="none" strokeLinecap="round" />
+            <path d="M54 62 Q28 78 12 76" stroke="hsl(28,70%,55%)" strokeWidth="3" fill="none" strokeLinecap="round" />
           </svg>
         </div>
       )}

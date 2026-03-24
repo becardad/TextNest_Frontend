@@ -63,15 +63,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Manage socket connection based on user authentication
   useEffect(() => {
     if (user) {
-      socket.connect();
-      socket.emit('join', user.id);
+      if (!socket.connected) socket.connect();
     } else {
       socket.disconnect();
     }
-    
-    return () => {
-      // Don't arbitrarily disconnect on unmount unless user logs out
-    };
   }, [user]);
 
   const login = (userData: User, token: string) => {

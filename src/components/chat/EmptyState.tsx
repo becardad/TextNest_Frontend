@@ -16,7 +16,7 @@ export default function EmptyState() {
         {/* Animated brand logo */}
         <div className="relative mb-12 flex flex-col items-center justify-center animate-float">
           <TextNestLogo size={180} birdVariant="hover" />
-          <h1 className="mt-8 text-5xl font-black bg-gradient-to-br from-foreground via-foreground/90 to-primary/80 bg-clip-text text-transparent tracking-tighter" style={{ fontFamily: "'Inter', sans-serif" }}>
+          <h1 className="mt-1 text-5xl font-black bg-gradient-to-br from-foreground via-foreground/90 to-primary/80 bg-clip-text text-transparent tracking-tighter" style={{ fontFamily: "'Inter', sans-serif" }}>
             TextNest
           </h1>
         </div>
