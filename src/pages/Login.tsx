@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, MessageCircle, ArrowRight, Zap, Shield, Users, Phone } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, Zap, Shield, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
@@ -158,25 +158,6 @@ export default function Login() {
           </Link>
         </p>
 
-        <div className="flex items-center gap-5 mb-4 mt-4 animate-fade-in" style={{ animationDelay: "450ms", animationFillMode: "backwards" }}>
-          <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent" />
-          <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground/40 font-black">Or Continue With</span>
-          <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 animate-fade-in" style={{ animationDelay: "550ms", animationFillMode: "backwards" }}>
-          <button className="h-14 rounded-[22px] border border-border/40 bg-card/20 backdrop-blur-xl text-sm font-bold text-foreground hover:bg-accent/40 hover:border-primary/30 transition-all duration-500 active:scale-[0.98] flex items-center justify-center gap-3 group shadow-lg">
-            <svg className="h-5 w-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24"><path fill="currentColor" d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/></svg>
-            Google
-          </button>
-          <button className="h-14 rounded-[22px] border border-border/40 bg-card/20 backdrop-blur-xl text-sm font-bold text-foreground hover:bg-accent/40 hover:border-primary/30 transition-all duration-500 active:scale-[0.98] flex items-center justify-center gap-3 group shadow-lg">
-            <Phone className="h-5 w-5 transition-transform group-hover:scale-110 text-primary" />
-            Mobile
-          </button>
-        </div>
-
-          {/* Spacer to keep bottom margin consistent */}
-          <div className="h-4" />
       </div>
     </div>
   );

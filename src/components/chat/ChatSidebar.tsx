@@ -335,11 +335,6 @@ export default function ChatSidebar({ chats, activeChatId, onSelectChat, onOpenS
                       <UserAvatar name={chat.user.name} online size="md" profilePicture={chat.user.profilePicture} />
                     </div>
                   </div>
-                  {chat.unread > 0 && (
-                    <span className="absolute -top-1 -right-1 h-4.5 min-w-[18px] px-1 rounded-full gradient-primary text-white text-[9px] font-black flex items-center justify-center shadow-lg shadow-primary/40 ring-2 ring-background leading-none">
-                      {chat.unread > 9 ? "9+" : chat.unread}
-                    </span>
-                  )}
                 </div>
                 <span className="text-[10px] text-muted-foreground group-hover:text-foreground transition-colors truncate max-w-[52px]">
                   {chat.user.name.split(" ")[0]}

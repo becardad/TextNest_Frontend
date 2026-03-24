@@ -1,4 +1,4 @@
-import { MessageCircle, ArrowLeft, Sparkles, Lock, Zap } from "lucide-react";
+import { Sparkles, Lock, Zap } from "lucide-react";
 import TextNestLogo from "../TextNestLogo";
 
 export default function EmptyState() {
@@ -52,10 +52,7 @@ export default function EmptyState() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2 mt-8 text-xs text-muted-foreground/50 animate-fade-in" style={{ animationDelay: "800ms", animationFillMode: "backwards" }}>
-          <ArrowLeft className="h-3.5 w-3.5" />
-          <span>Choose a conversation to get started</span>
-        </div>
+      
       </div>
     </div>
   );

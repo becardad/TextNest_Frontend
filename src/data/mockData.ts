@@ -42,6 +42,7 @@ export interface Message {
   deleted?: boolean;
   fileName?: string;
   fileSize?: string;
+  isForwarded?: boolean;
   starredBy?: string[];
 }
 

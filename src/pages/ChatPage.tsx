@@ -10,12 +10,15 @@ import StarredMessages from "@/components/chat/StarredMessages";
 import CallsSidebar, { CallLog } from "@/components/chat/CallsSidebar";
 import ProfileViewer from "@/components/chat/ProfileViewer";
 import CallScreen from "@/components/chat/CallScreen";
+import GeminiChat from "@/components/chat/GeminiChat";
 import { cn } from "@/lib/utils";
 import type { Chat, User, Message } from "@/data/mockData";
 import { encryptMessage, decryptMessage } from "@/lib/encryption";
 import { useAuth } from "@/hooks/useAuth";
 import api from "@/lib/api";
 import { socket } from "@/lib/socket";
+import { toast } from "sonner";
+
 
 export default function ChatPage() {
   const { user, updateUser } = useAuth();
@@ -70,7 +73,7 @@ export default function ChatPage() {
             messages: [],
             lastMessage: last?.text ? decryptMessage(last.text) : (last?.type === 'image' ? '📷 Photo' : last?.type === 'voice' ? '🎙️ Voice note' : last?.type === 'document' ? '📎 Media' : 'Start chatting'),
             lastMessageTime: last ? new Date(last.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '',
-            unread: 0,
+            unread: conv.unread || 0,
           };
         });
 
@@ -143,7 +146,7 @@ export default function ChatPage() {
       // Auto-log calls to the Sidebar when a call starts (so sender is reliably the initiator)
       if (msg.type === "system" && msg.text.includes("started")) {
         const isVoice = msg.text.includes("Voice");
-        const isOutgoing = msg.senderId === user?.id; 
+        const isOutgoing = String(msg.senderId) === String(user?.id); 
         const contactId = isOutgoing ? msg.receiverId : msg.senderId;
         
         // Persist to DB
@@ -155,8 +158,8 @@ export default function ChatPage() {
         }).catch(console.error);
 
         setCallLogs(prev => {
-          if (prev.some(log => log.id === msg._id)) return prev;
-          const contactUser = allChats.find(c => c.user.id === contactId)?.user || { id: contactId, name: "Unknown", online: false, avatar: "", profilePicture: "" };
+          if (prev.some(log => String(log.id) === String(msg._id))) return prev;
+          const contactUser = allChats.find(c => String(c.user.id) === String(contactId))?.user || { id: contactId, name: "Unknown", online: false, avatar: "", profilePicture: "" };
           
           return [{
             id: msg._id,
@@ -171,12 +174,18 @@ export default function ChatPage() {
 
       setAllChats((prev) => 
         prev.map((c) => {
-          if (c.user.id === msg.senderId || c.user.id === msg.receiverId || (msg.groupId && c.user.id === msg.groupId)) {
+          const chatId = String(c.user.id);
+          const msgSenderId = String(msg.senderId);
+          const msgReceiverId = String(msg.receiverId);
+          const msgGroupId = msg.groupId ? String(msg.groupId) : null;
+          const myId = String(user?.id);
+
+          if (chatId === msgSenderId || chatId === msgReceiverId || (msgGroupId && chatId === msgGroupId)) {
             return {
               ...c,
               lastMessage: msg.text ? decryptMessage(msg.text) : (msg.type === "image" ? "📷 Photo" : msg.type === "voice" ? "🎙️ Voice note" : "📎 Media"),
               lastMessageTime: new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-              unread: (activeChatId === c.user.id || msg.senderId === user?.id || msg.type === "system") ? 0 : (c.unread || 0) + 1
+              unread: (String(activeChatId) === chatId || msgSenderId === myId || msg.type === "system") ? 0 : (c.unread || 0) + 1
             };
           }
           return c;
@@ -201,8 +210,9 @@ export default function ChatPage() {
     };
 
     const handleIncomingCall = (data: { from: string, fromName: string, callType: "voice" | "video", offer: any }) => {
-      // Find the user or create a temporary one
-      const callerUser = allChats.find(c => c.user.id === data.from)?.user || {
+      console.log("Receiving call request from:", data.from, data.fromName);
+      
+      const callerUser = allChats.find(c => String(c.user.id) === String(data.from))?.user || {
         id: data.from,
         name: data.fromName,
         online: true,
@@ -210,6 +220,23 @@ export default function ChatPage() {
         profilePicture: ""
       };
       
+      toast.info(`Incoming ${data.callType} call from ${data.fromName}`, {
+        duration: 10000,
+        action: {
+          label: "Answer",
+          onClick: () => setActiveCall({
+            user: callerUser as User,
+            type: data.callType,
+            incoming: true,
+            offer: data.offer,
+          })
+        },
+        cancel: {
+          label: "Decline",
+          onClick: () => socket.emit("call_rejected", { to: data.from })
+        }
+      });
+
       setActiveCall({
         user: callerUser as User,
         type: data.callType,
@@ -233,12 +260,18 @@ export default function ChatPage() {
       socket.off('online_users', onlineListener);
       socket.off('call_request', handleIncomingCall);
     };
-  }, [activeChatId, user?.id, allChats.length]);
+  }, [activeChatId, user?.id, allChats]);
+
+  // Sync document title with unread count
+  useEffect(() => {
+    const unread = allChats.reduce((acc, c) => acc + (c.unread || 0), 0);
+    document.title = unread > 0 ? `(${unread}) TextNest` : "TextNest";
+  }, [allChats]);
 
   // Reset unread when opening a chat
   useEffect(() => {
     if (activeChatId) {
-      setAllChats(prev => prev.map(c => c.user.id === activeChatId ? { ...c, unread: 0 } : c));
+      setAllChats(prev => prev.map(c => String(c.user.id) === String(activeChatId) ? { ...c, unread: 0 } : c));
     }
   }, [activeChatId]);
 
@@ -362,6 +395,8 @@ export default function ChatPage() {
               callLogs={callLogs} 
               onStartCall={(u, type) => setActiveCall({ user: u, type })} 
             />
+          ) : activeTab === "gemini" ? (
+            <GeminiChat />
           ) : activeTab === "starred" ? (
             <StarredMessages starredMessages={starredMessages} onClose={() => setActiveTab("chats")} />
           ) : activeTab === "settings" ? (

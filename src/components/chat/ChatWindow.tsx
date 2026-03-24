@@ -103,13 +103,28 @@ export default function ChatWindow({ chat, onBack, textSize = 16, starredIds, on
     const fetchMessages = async () => {
       try {
         const res = await api.get(`/chat/messages/${chat.user.id}`);
-        const mapped = res.data.map((m: any) => ({
-          ...m,
-          text: decryptMessage(m.text),
-          id: m._id,
-          timestamp: new Date(m.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-          senderId: m.type === "system" ? "system" : (m.senderId === user?.id ? "me" : m.senderId)
-        }));
+        const deletedForMe = JSON.parse(localStorage.getItem('deletedForMe') || "[]");
+        const mapped = res.data.map((m: any) => {
+          // Resolve reply name: if the replyTo sender is us, show "You", otherwise the chatted user name
+          const isMine = m.senderId?.toString() === user?.id;
+          let replyToMapped = undefined;
+          if (m.replyTo) {
+            const replyIsMine = m.replyTo.senderId?._id?.toString() === user?.id ||
+                                m.replyTo.senderId?.toString() === user?.id;
+            replyToMapped = {
+              name: replyIsMine ? "You" : (m.replyTo.senderId?.name || chat.user.name),
+              text: m.replyTo.text ? decryptMessage(m.replyTo.text) : "[Media]"
+            };
+          }
+          return {
+            ...m,
+            text: decryptMessage(m.text),
+            replyTo: replyToMapped,
+            id: m._id,
+            timestamp: new Date(m.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+            senderId: m.type === "system" ? "system" : (isMine ? "me" : m.senderId)
+          };
+        }).filter((m: any) => !deletedForMe.includes(m.id));
         setMessages(mapped);
       } catch (err) {
         console.error("Failed to fetch messages");
@@ -150,18 +165,39 @@ export default function ChatWindow({ chat, onBack, textSize = 16, starredIds, on
 
   useEffect(() => {
     const messageListener = (msg: any) => {
-      if (msg.senderId === user?.id) return; // Prevent duplicate for sender from server echo
+      const myId = String(user?.id);
+      const msgSenderId = String(msg.senderId);
+      const msgId = String(msg._id);
+
+      // 1. Prevent duplicate if this message was sent by current user (already added optimistically)
+      if (msgSenderId === myId) return;
+
+      // 2. Prevent duplicate if this exact message is already in state (useful for multi-tab sync)
+      // Note: we check both .id and ._id for compatibility
+      if (messages.some(m => String(m.id) === msgId || String((m as any)._id) === msgId)) return;
 
       // For groups, msg.receiverId is the group ID (chat.user.id). 
       // For personal, msg.senderId is the peer (chat.user.id).
-      if (msg.senderId === chat.user.id || msg.receiverId === chat.user.id) {
-        setMessages((prev) => [...prev, {
-          ...msg,
-          text: decryptMessage(msg.text),
-          id: msg._id,
-          timestamp: msg.timestamp || new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-          senderId: msg.type === "system" ? "system" : (msg.senderId === user?.id ? "me" : msg.senderId)
-        }]);
+      const chatId = String(chat.user.id);
+      const msgReceiverId = String(msg.receiverId);
+
+      if (msgSenderId === chatId || msgReceiverId === chatId) {
+        setMessages((prev) => {
+          if (prev.some(m => String(m.id) === msgId || String((m as any)._id) === msgId)) return prev;
+          
+          const deletedForMe = JSON.parse(localStorage.getItem('deletedForMe') || "[]");
+          if (deletedForMe.includes(msgId)) return prev;
+
+          return [...prev, {
+            ...msg,
+            text: decryptMessage(msg.text),
+            replyTo: msg.replyToResolved || (msg.replyTo?.text ? { name: msg.replyTo.senderId?.name || chat.user.name, text: decryptMessage(msg.replyTo.text) } : undefined),
+            isForwarded: msg.isForwarded || false,
+            id: msg._id,
+            timestamp: msg.timestamp || new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+            senderId: msg.type === "system" ? "system" : (msgSenderId === myId ? "me" : msg.senderId)
+          }];
+        });
         // Immediately mark as read if we are looking at this chat
         api.put(`/chat/messages/read/${chat.user.id}`).then(() => {
           socket.emit('messages_read', { readerId: user?.id, senderId: chat.user.id });
@@ -227,16 +263,14 @@ export default function ChatWindow({ chat, onBack, textSize = 16, starredIds, on
     };
   }, [chat.user.id, user]);
 
-  // Mark all unread messages as read upon opening chat
+  // Mark messages as read only when this component first mounts (i.e. user opens the chat)
   useEffect(() => {
-    const unread = messages.filter(m => m.senderId !== "me" && m.status !== "read");
-    if (unread.length > 0) {
-      api.put(`/chat/messages/read/${chat.user.id}`).then(() => {
-        socket.emit('messages_read', { readerId: user?.id, senderId: chat.user.id });
-        setMessages((prev) => prev.map(m => m.senderId !== "me" ? { ...m, status: "read" } : m));
-      });
-    }
-  }, [messages.length, chat.user.id, user]);
+    api.put(`/chat/messages/read/${chat.user.id}`).then(() => {
+      socket.emit('messages_read', { readerId: user?.id, senderId: chat.user.id });
+      setMessages((prev) => prev.map(m => m.senderId !== "me" ? { ...m, status: "read" } : m));
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat.user.id]);
 
   // Track first load per chat to snap scroll instantly
   const isInitialLoad = useRef(true);
@@ -292,7 +326,14 @@ export default function ChatWindow({ chat, onBack, textSize = 16, starredIds, on
       text: textToSend,
       timestamp: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       status: "sent",
-      replyTo: replyTo ? { name: replyTo.senderId === "me" ? "You" : chat.user.name, text: replyTo.text } : undefined,
+      replyTo: replyTo ? {
+        name: replyTo.senderId === "me" ? "You" : chat.user.name,
+        text: replyTo.type === "image" ? "📷 Photo" :
+              replyTo.type === "video" ? "🎥 Video" :
+              replyTo.type === "voice" ? "🎙️ Voice note" :
+              replyTo.type === "document" ? `📎 ${replyTo.fileName || "Document"}` :
+              replyTo.text || "[Message]"
+      } : undefined,
     };
     setMessages(prev => [...prev, tempMsg]);
     const replySnap = replyTo;
@@ -307,10 +348,12 @@ export default function ChatWindow({ chat, onBack, textSize = 16, starredIds, on
         id: newMsg._id,
         timestamp: new Date(newMsg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
         senderId: "me",
-        status: "delivered"
+        status: "delivered",
+        replyTo: tempMsg.replyTo,
       };
       setMessages(prev => prev.map(m => m.id === tempId ? formattedMsg : m));
-      socket.emit('send_message', newMsg);
+      // Pass resolved replyTo so receiver can display it correctly
+      socket.emit('send_message', { ...newMsg, replyToResolved: tempMsg.replyTo });
     } catch (err) {
       toast.error("Failed to send message");
       setMessages(prev => prev.filter(m => m.id !== tempId));
@@ -341,6 +384,16 @@ export default function ChatWindow({ chat, onBack, textSize = 16, starredIds, on
     } catch (err) {
       toast.error("Failed to delete message");
     }
+  };
+
+  const handleDeleteForMe = (msgId: string) => {
+    const deletedForMe = JSON.parse(localStorage.getItem('deletedForMe') || "[]");
+    if (!deletedForMe.includes(msgId)) {
+      deletedForMe.push(msgId);
+      localStorage.setItem('deletedForMe', JSON.stringify(deletedForMe));
+    }
+    setMessages(prev => prev.filter(m => m.id !== msgId));
+    toast.success("Message deleted for you");
   };
 
   const handleSendViewOnce = async () => {
@@ -450,7 +503,9 @@ export default function ChatWindow({ chat, onBack, textSize = 16, starredIds, on
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const recorder = new MediaRecorder(stream, {
+        audioBitsPerSecond: 128000 // 128kbps for 'original' quality
+      });
       mediaRecorderRef.current = recorder;
       audioChunksRef.current = [];
 
@@ -757,6 +812,7 @@ export default function ChatWindow({ chat, onBack, textSize = 16, starredIds, on
                 if (m) onToggleStar(m);
               } : undefined} 
               onDelete={handleDeleteMessage}
+              onDeleteForMe={handleDeleteForMe}
               onReply={() => setReplyTo(msg)}
               onEdit={msg.senderId === "me" ? () => { setEditingMsg(msg); setInput(msg.text); } : undefined}
               onReact={(emoji) => handleReact(msg.id, emoji)}
@@ -906,14 +962,14 @@ export default function ChatWindow({ chat, onBack, textSize = 16, starredIds, on
           onClose={() => setForwardMsg(null)}
           onForward={async (userId) => {
             try {
-              const res = await api.post(`/chat/messages/${userId}`, { text: encryptMessage(forwardMsg.text), type: forwardMsg.type, imageUrl: forwardMsg.imageUrl });
+              const res = await api.post(`/chat/messages/${userId}`, { text: encryptMessage(forwardMsg.text), type: forwardMsg.type, imageUrl: forwardMsg.imageUrl, isForwarded: true });
               setForwardMsg(null);
               toast.success("Message forwarded");
               if (userId === chat.user.id) {
                 const newMsg = res.data;
-                const formattedMsg: Message = { ...newMsg, text: decryptMessage(newMsg.text), id: newMsg._id, timestamp: new Date(newMsg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), senderId: "me", status: "delivered" };
+                const formattedMsg: Message = { ...newMsg, text: decryptMessage(newMsg.text), id: newMsg._id, timestamp: new Date(newMsg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), senderId: "me", status: "delivered", isForwarded: true };
                 setMessages(prev => [...prev, formattedMsg]);
-                socket.emit('send_message', newMsg);
+                socket.emit('send_message', { ...newMsg, isForwarded: true });
               }
             } catch { toast.error("Failed to forward"); }
           }}

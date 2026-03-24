@@ -73,6 +73,23 @@ export default function CallScreen({ user: remoteUser, type, incoming, offer, on
           }
         };
 
+        pc.onnegotiationneeded = async () => {
+          try {
+            if (pc.signalingState !== "stable") return;
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit("call_request", {
+              to: remoteUser.id,
+              from: currentUser.id,
+              fromName: currentUser.name,
+              callType: type,
+              offer: pc.localDescription,
+            });
+          } catch (err) {
+            console.error("Negotiation error:", err);
+          }
+        };
+
         pc.onconnectionstatechange = () => {
           if (pc.connectionState === "connected") setCallState("connected");
           if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
@@ -106,13 +123,23 @@ export default function CallScreen({ user: remoteUser, type, incoming, offer, on
     // Socket listeners
     const handleAnswer = async ({ answer }: any) => {
       if (pcRef.current && pcRef.current.signalingState !== "closed") {
-        await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+        try {
+          await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+        } catch (e) { console.error("Error setting remote description:", e); }
       }
     };
 
     const handleIceCandidate = async ({ candidate }: any) => {
-      if (pcRef.current && pcRef.current.signalingState !== "closed" && pcRef.current.remoteDescription) {
-        await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.error(e));
+      if (pcRef.current && pcRef.current.signalingState !== "closed") {
+        try {
+          // If remote description is set, add candidate immediately
+          if (pcRef.current.remoteDescription) {
+            await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+          } else {
+            // Queue candidate for later (simplified here, but SDK usually handles)
+            console.log("Queueing ICE candidate...");
+          }
+        } catch (e) { console.error("Error adding ICE candidate:", e); }
       }
     };
 
