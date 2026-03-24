@@ -1,0 +1,202 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* 
+  Design System: "TextNest"
+  Direction: Warm, confident, grounded. 
+  Palette: Warm stone backgrounds, deep ink foreground, burnt sienna accent.
+  Not corporate, not playful — somewhere between a leather notebook and a good coffee shop.
+*/
+
+@layer base {
+  :root {
+    --background: 40 20% 98%;
+    --foreground: 20 20% 12%;
+    --card: 40 15% 97%;
+    --card-foreground: 20 20% 12%;
+    --popover: 40 20% 98%;
+    --popover-foreground: 20 20% 12%;
+    --primary: 16 65% 52%;
+    --primary-foreground: 40 20% 98%;
+    --secondary: 35 15% 93%;
+    --secondary-foreground: 20 20% 18%;
+    --muted: 35 12% 93%;
+    --muted-foreground: 20 8% 52%;
+    --accent: 35 15% 91%;
+    --accent-foreground: 20 20% 14%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 12% 89%;
+    --input: 30 12% 89%;
+    --ring: 16 65% 52%;
+    --radius: 0.625rem;
+
+    --chat-sent-from: 16 65% 52%;
+    --chat-sent-to: 24 70% 46%;
+    --chat-sent-foreground: 40 20% 98%;
+    --chat-received: 35 14% 94%;
+    --chat-received-foreground: 20 20% 12%;
+    --chat-surface: 38 18% 96%;
+
+    --glass: 40 20% 98% / 0.75;
+    --glass-border: 30 12% 80% / 0.35;
+    --glow: 16 65% 52%;
+
+    --sidebar-background: 38 16% 96%;
+    --sidebar-foreground: 20 15% 25%;
+    --sidebar-primary: 16 65% 52%;
+    --sidebar-primary-foreground: 40 20% 98%;
+    --sidebar-accent: 35 14% 92%;
+    --sidebar-accent-foreground: 20 15% 14%;
+    --sidebar-border: 30 12% 89%;
+    --sidebar-ring: 16 65% 52%;
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 35 15% 90%;
+    --card: 0 0% 7%;
+    --card-foreground: 35 15% 90%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 35 15% 90%;
+    --primary: 16 65% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 11%;
+    --secondary-foreground: 35 15% 90%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 12%;
+    --accent-foreground: 35 15% 90%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 14%;
+    --input: 0 0% 14%;
+    --ring: 16 65% 55%;
+
+    --chat-sent-from: 16 60% 46%;
+    --chat-sent-to: 24 65% 40%;
+    --chat-sent-foreground: 0 0% 100%;
+    --chat-received: 0 0% 12%;
+    --chat-received-foreground: 35 15% 90%;
+    --chat-surface: 0 0% 5%;
+
+    --glass: 0 0% 7% / 0.65;
+    --glass-border: 0 0% 100% / 0.06;
+    --glow: 16 65% 55%;
+
+    --sidebar-background: 0 0% 6%;
+    --sidebar-foreground: 35 12% 85%;
+    --sidebar-primary: 16 65% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 11%;
+    --sidebar-accent-foreground: 35 12% 85%;
+    --sidebar-border: 0 0% 14%;
+    --sidebar-ring: 16 65% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.12) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.12);
+    border-radius: 20px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.25);
+  }
+
+  .glass {
+    background: hsl(var(--glass));
+    backdrop-filter: blur(20px) saturate(1.6);
+    -webkit-backdrop-filter: blur(20px) saturate(1.6);
+    border: 1px solid hsl(var(--glass-border));
+  }
+
+  .glass-subtle {
+    background: hsl(var(--glass));
+    backdrop-filter: blur(12px) saturate(1.3);
+    -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  }
+
+  .gradient-sent {
+    background: linear-gradient(135deg, hsl(var(--chat-sent-from)), hsl(var(--chat-sent-to)));
+  }
+
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(16 65% 52%), hsl(24 70% 46%));
+  }
+
+  .gradient-brand {
+    background: linear-gradient(135deg, hsl(16 65% 52%), hsl(350 55% 48%));
+  }
+
+  .gradient-mesh {
+    background:
+      radial-gradient(ellipse at 25% 50%, hsl(16 65% 52% / 0.08) 0%, transparent 55%),
+      radial-gradient(ellipse at 75% 20%, hsl(35 60% 55% / 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 80%, hsl(350 55% 48% / 0.05) 0%, transparent 50%);
+  }
+
+  .glow-sm {
+    box-shadow: 0 0 20px -5px hsl(var(--glow) / 0.25);
+  }
+
+  .glow-md {
+    box-shadow: 0 0 40px -10px hsl(var(--glow) / 0.35);
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(16 65% 52%), hsl(350 55% 48%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .shadow-elevated {
+    box-shadow:
+      0 1px 2px hsl(20 20% 12% / 0.03),
+      0 4px 12px hsl(20 20% 12% / 0.04),
+      0 12px 28px hsl(20 20% 12% / 0.05);
+  }
+
+  .dark .shadow-elevated {
+    box-shadow:
+      0 1px 2px hsl(0 0% 0% / 0.2),
+      0 4px 12px hsl(0 0% 0% / 0.15),
+      0 12px 28px hsl(0 0% 0% / 0.2);
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
